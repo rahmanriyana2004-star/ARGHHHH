@@ -112,6 +112,25 @@
             box-shadow: 0 0 10px #FFB6D9;
         }
 
+        #input-school-name {
+            width: 100%;
+            padding: clamp(10px, 2vw, 12px) clamp(12px, 3vw, 15px);
+            border: clamp(2px, 0.5vw, 4px) solid #7EC8E3;
+            border-radius: 8px;
+            font-size: clamp(14px, 3vw, 16px);
+            font-weight: bold;
+            text-align: center;
+            margin: clamp(12px, 3vw, 20px) 0;
+            font-family: Georgia, serif;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        #input-school-name:focus {
+            outline: none;
+            box-shadow: 0 0 10px #FFB6D9;
+        }
+
         h1 {
             color: #5EB3D6;
             font-size: clamp(32px, 8vw, 48px);
@@ -1005,6 +1024,7 @@
             <h1>RESONANCE ODYSSEY</h1>
             <p>Selamat Datang, Penjelajah!</p>
             <input type="text" id="input-player-name" placeholder="Ketik namamu di sini...">
+            <input type="text" id="input-school-name" placeholder="Ketik nama sekolahmu di sini..." style="margin-top: 10px;">
             <button class="btn-gold" onclick="showRules()">START GAME</button>
         </div>
     </div>
@@ -1149,6 +1169,7 @@
 
         let state = {
             playerName: '',
+            schoolName: '',
             idx: 0,
             lives: 5,
             charId: '',
@@ -1159,7 +1180,8 @@
             autoMode: false,
             autoPaused: false,
             autoTimer: null,
-            currentAudio: null
+            currentAudio: null,
+            answers: [] // Array untuk track jawaban per soal: {questionId, correct, answer}
         };
         
         const TRAVEL_DURATION = 5000; // 5 seconds untuk perjalanan (agar musik bisa dimainkan)
@@ -1192,11 +1214,17 @@
 
         function showRules() {
             const name = document.getElementById('input-player-name').value;
+            const school = document.getElementById('input-school-name').value;
             if (!name) {
                 alert('Masukkan nama terlebih dahulu!');
                 return;
             }
+            if (!school) {
+                alert('Masukkan nama sekolah terlebih dahulu!');
+                return;
+            }
             state.playerName = name;
+            state.schoolName = school;
             document.getElementById('screen-name').classList.add('hidden');
             document.getElementById('screen-rules').classList.remove('hidden');
         }
@@ -1398,6 +1426,15 @@
         function checkAns(correct) {
             document.querySelectorAll('.quiz-opt-btn').forEach(b => b.disabled = true);
             
+            // Record jawaban
+            const questionId = state.idx;
+            state.answers.push({
+                questionId: questionId,
+                cityName: cityData[questionId].name,
+                correct: correct,
+                timestamp: new Date().toISOString()
+            });
+            
             const feedbackBox = document.getElementById('quiz-feedback-box');
             const icon = document.getElementById('feedback-icon');
             const title = document.getElementById('feedback-title');
@@ -1445,6 +1482,39 @@
             }, 2000);
         }
 
+        function sendGameDataToSpreadsheet(win) {
+            // Ganti URL ini dengan URL Google Forms Anda
+            const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLScqZ0E6JF0yOCgyU9CdywAkMdGo-cRWtDjYaM8eJa3ZPbBjig/formResponse';
+            
+            const formData = new FormData();
+            
+            // Data dasar siswa
+            formData.append('entry.595722973', state.playerName); // Nama Siswa
+            formData.append('entry.725280792', state.schoolName); // Nama Sekolah
+            formData.append('entry.96563292', state.charId); // Karakter
+            formData.append('entry.1117235510', win ? 'Menang' : 'Kalah'); // Hasil Game
+            formData.append('entry.450530510', state.lives); // Nyawa Tersisa
+            formData.append('entry.1655330258', state.answers.filter(a => a.correct).length); // Total Benar
+            formData.append('entry.1984621075', state.answers.filter(a => !a.correct).length); // Total Salah
+            formData.append('entry.439573770', new Date().toLocaleString('id-ID')); // Waktu Selesai
+            
+            // Detail jawaban per soal (dalam format JSON untuk satu field)
+            const answersDetail = state.answers.map(answer => 
+                `${answer.cityName}: ${answer.correct ? 'Benar' : 'Salah'}`
+            ).join(' | ');
+            formData.append('entry.674416243', answersDetail); // Detail Jawaban
+            
+            fetch(formUrl, {
+                method: 'POST',
+                body: formData,
+                mode: 'no-cors'
+            }).then(() => {
+                console.log('Data berhasil dikirim ke spreadsheet');
+            }).catch(error => {
+                console.log('Error mengirim data:', error);
+            });
+        }
+
         function finish(win) {
             state.active = false;
             const overlay = document.getElementById('end-overlay');
@@ -1458,6 +1528,9 @@
                 document.getElementById('end-message').innerText = "Stamina habis. Pelajari lagi kekayaan musik Nusantara dan coba lagi!";
                 document.getElementById('end-title').style.color = '#dc2626';
             }
+            
+            // Kirim data ke spreadsheet
+            sendGameDataToSpreadsheet(win);
             
             overlay.classList.add('show');
         }
